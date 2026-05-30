@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Chat de soporte JEOVANNY VARIEDADES">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="apple-mobile-web-app-title" content="JEOVANNY VARIEDADES">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="../manifest.json">
+    <link rel="icon" href="../img/icons/favicon.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../img/icons/apple-touch-icon.png">
+    <title>Chat - JEOVANNY VARIEDADES</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body class="page-chat">
+    <div class="app-shell chat-shell">
+        <header class="app-header chat-header">
+            <button class="back-btn" id="returnHomeButton" type="button" title="Volver">← Volver</button>
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="../img/logo.png" alt="Logo JEOVANNY VARIEDADES">
+                </div>
+                <div class="brand-copy">
+                    <p class="brand-title">SOPORTE</p>
+                    <p class="brand-subtitle">JEOVANNY VARIEDADES</p>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content chat-content">
+            <div class="chat-overview">
+                <div class="chat-preview">
+                    <h2>Productos seleccionados</h2>
+                    <div class="product-preview-list" id="selectedProductsPreview"></div>
+                </div>
+                <div class="chat-status">
+                    <p>Envía tu consulta al equipo de soporte.</p>
+                    <span class="badge badge-accent">Respuestas en menos de 24h</span>
+                </div>
+            </div>
+
+            <section class="chat-card">
+                <div class="messages" id="messageList"></div>
+                <form class="chat-form" id="chatForm">
+                    <div class="form-row">
+                        <input id="chatName" type="text" placeholder="Tu nombre (opcional)">
+                        <input id="chatEmail" type="email" placeholder="Correo electrónico (opcional)">
+                    </div>
+                    <textarea id="chatInput" rows="3" placeholder="Describe tu consulta..."></textarea>
+                    <div class="form-actions">
+                        <button class="btn-secondary" type="button" id="clearChat">Limpiar chat</button>
+                        <button class="btn-primary" type="submit">Enviar consulta</button>
+                    </div>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/chat.js"></script>
+</body>
+</html>

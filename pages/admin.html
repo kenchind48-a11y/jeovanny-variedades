@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Panel administrador JEOVANNY VARIEDADES">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="apple-mobile-web-app-title" content="JEOVANNY VARIEDADES">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="../manifest.json">
+    <link rel="icon" href="../img/icons/favicon.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../img/icons/apple-touch-icon.png">
+    <title>Administrador - JEOVANNY VARIEDADES</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body class="page-admin">
+    <script>
+        if (localStorage.getItem('adminAuth') !== 'true') {
+            window.location.href = '../index.html';
+        }
+    </script>
+    <div class="app-shell admin-shell">
+        <header class="app-header admin-header">
+            <button class="back-btn" id="returnHomeButton" type="button" title="Volver">← Volver</button>
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="../img/logo.png" alt="Logo JEOVANNY VARIEDADES">
+                </div>
+                <div class="brand-copy">
+                    <p class="brand-title">ADMINISTRAR</p>
+                    <p class="brand-subtitle">JEOVANNY VARIEDADES</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" id="logoutButton" type="button" title="Cerrar sesión">🔓</button>
+            </div>
+        </header>
+
+        <main class="main-content admin-content">
+            <section class="admin-top">
+                <div>
+                    <h2>Panel de administración</h2>
+                    <p>Gestiona productos, categorías y consultas desde un solo lugar.</p>
+                </div>
+                <div class="admin-actions">
+                    <input id="adminSearch" type="search" placeholder="Buscar en administración..." autocomplete="off">
+                    <button class="btn-primary" id="adminAddButton" type="button">Agregar producto</button>
+                </div>
+            </section>
+
+            <section class="dashboard-grid">
+                <article class="status-card">
+                    <p>TOTAL PRODUCTOS</p>
+                    <strong data-stat="total-productos">0</strong>
+                </article>
+                <article class="status-card">
+                    <p>DISPONIBLES</p>
+                    <strong data-stat="disponibles">0</strong>
+                </article>
+                <article class="status-card">
+                    <p>VALOR TOTAL</p>
+                    <strong data-stat="valor-total">$0.00</strong>
+                </article>
+            </section>
+
+            <section class="admin-controls">
+                <div class="tabs-row">
+                    <button class="tab-btn active" data-tab="productos">Productos</button>
+                    <button class="tab-btn" data-tab="categorias">Categorías</button>
+                    <button class="tab-btn" data-tab="consultas">Consultas</button>
+                </div>
+
+                <section class="tab-panel active" id="productosPanel">
+                    <div class="table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Categoría</th>
+                                    <th>Precio</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productsTableBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="tab-panel" id="categoriasPanel">
+                    <div class="category-panel">
+                        <div class="category-header">
+                            <div>
+                                <h3>Categorías</h3>
+                                <p>Agrega, edita o elimina categorías.</p>
+                            </div>
+                            <button class="btn-secondary" id="openCategoryForm" type="button">Agregar categoría</button>
+                        </div>
+                        <div class="categories-grid" id="categoryListAdmin"></div>
+                    </div>
+                </section>
+
+                <section class="tab-panel" id="consultasPanel">
+                    <div class="consultations-panel">
+                        <div class="consultations-header">
+                            <div>
+                                <h3>Consultas de clientes</h3>
+                                <p>Responde y revisa el historial de cada consulta.</p>
+                            </div>
+                        </div>
+                        <div class="consultation-list" id="consultationList"></div>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <div class="modal-overlay hidden" id="modalOverlay">
+        <div class="modal modal-content" id="modalContent"></div>
+    </div>
+
+    <script src="../js/storage.js"></script>
+    <script src="../js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+    "name": "JEOVANNY VARIEDADES",
+    "short_name": "Jeovanny",
+    "description": "Tienda móvil instalable con experiencia de app para gestionar productos, categorías y soporte.",
+    "start_url": "/index.html?source=pwa",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#0f0f0f",
+    "background_color": "#0f0f0f",
+    "categories": ["shopping", "business", "productivity"],
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "img/icons/icon-192.png",
+            "type": "image/png",
+            "sizes": "192x192",
+            "purpose": "any"
+        },
+        {
+            "src": "img/icons/icon-512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "purpose": "any maskable"
+        }
+    ]
+}
