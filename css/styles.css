@@ -818,17 +818,21 @@ button {
 .table-wrapper {
   overflow-x: auto;
   border-radius: 28px;
+  width: 100%;
+  min-width: 0;
 }
 
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 700px;
+  table-layout: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .admin-table th,
 .admin-table td {
-  padding: 1rem 1.1rem;
+  padding: 0.85rem 1rem;
   text-align: left;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -838,10 +842,82 @@ button {
   text-transform: uppercase;
   color: var(--muted);
   letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.admin-table td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.admin-table td.product-thumb-cell {
+  width: 72px;
+  min-width: 72px;
+}
+
+.admin-table td.product-thumb-cell .product-thumb {
+  width: 50px;
+  height: 50px;
+  border-radius: 18px;
+  overflow: hidden;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-table td.product-thumb-cell .product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.admin-table td.product-thumb-cell .thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+  min-width: 48px;
+}
+
+.admin-table th:nth-child(4),
+.admin-table td:nth-child(4) {
+  min-width: 90px;
+}
+
+.admin-table th:nth-child(5),
+.admin-table td:nth-child(5) {
+  min-width: 90px;
+}
+
+.admin-table th:nth-child(6),
+.admin-table td:nth-child(6) {
+  min-width: 100px;
+}
+
+.admin-table th:nth-child(7),
+.admin-table td:nth-child(7) {
+  min-width: 150px;
 }
 
 .admin-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 560px) {
+  .admin-table th,
+  .admin-table td {
+    padding: 0.75rem 0.85rem;
+    font-size: 0.82rem;
+  }
 }
 
 .category-panel,

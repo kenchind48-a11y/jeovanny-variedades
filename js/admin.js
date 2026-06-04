@@ -66,7 +66,7 @@ function renderizarProductosAdmin() {
   if (productos.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center; padding:2rem; color:#808080;">
+        <td colspan="7" style="text-align:center; padding:2rem; color:#808080;">
           No hay productos que coincidan con la búsqueda.
         </td>
       </tr>
@@ -78,9 +78,14 @@ function renderizarProductosAdmin() {
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
+    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen);
+    const imagenHtml = tieneImagen
+      ? `<img src="${producto.imagen}" alt="${producto.nombre}">`
+      : `<span class="thumb-placeholder">📦</span>`;
 
     return `
       <tr data-producto-id="${producto.id}">
+        <td class="product-thumb-cell"><div class="product-thumb">${imagenHtml}</div></td>
         <td>${producto.id}</td>
         <td>${producto.nombre}</td>
         <td>${producto.categoria}</td>
