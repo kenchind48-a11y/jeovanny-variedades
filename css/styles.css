@@ -912,7 +912,7 @@ button {
   background: rgba(255, 255, 255, 0.04);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .table-wrapper {
     overflow-x: hidden;
   }
@@ -926,23 +926,20 @@ button {
   }
 
   .admin-table tbody {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
+    display: block;
     padding: 0;
+    gap: 1rem;
   }
 
   .admin-table tr {
-    display: grid;
+    display: block;
     width: 100%;
-    max-width: 100%;
-    grid-template-columns: 1fr;
-    gap: 0.85rem;
     padding: 0.85rem 1rem;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 28px;
     box-shadow: none;
+    margin-bottom: 1rem;
   }
 
   .admin-table td {
@@ -950,6 +947,9 @@ button {
     width: 100%;
     padding: 0;
     border: none;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
   }
 
   .admin-table td.product-thumb-cell {
@@ -960,7 +960,7 @@ button {
 
   .admin-table td.product-thumb-cell .product-thumb {
     width: 100%;
-    height: 220px;
+    height: clamp(180px, 45vw, 250px);
     border-radius: 24px;
   }
 
@@ -969,12 +969,12 @@ button {
   }
 
   .admin-table td:not(.product-thumb-cell):not(:last-child) {
-    padding-bottom: 0.65rem;
+    padding-bottom: 0.85rem;
   }
 
   .admin-table td:not(.product-thumb-cell)::before {
     display: block;
-    content: attr(data-label);
+    content: '';
     color: var(--muted);
     font-size: 0.78rem;
     font-weight: 600;
@@ -983,16 +983,16 @@ button {
     letter-spacing: 0.08em;
   }
 
-  .admin-table td.product-thumb-cell::before {
-    content: none;
-  }
-
   .admin-table td:nth-child(2)::before { content: 'ID'; }
   .admin-table td:nth-child(3)::before { content: 'Nombre'; }
   .admin-table td:nth-child(4)::before { content: 'Categoría'; }
   .admin-table td:nth-child(5)::before { content: 'Precio'; }
   .admin-table td:nth-child(6)::before { content: 'Estado'; }
   .admin-table td:nth-child(7)::before { content: 'Acciones'; }
+
+  .admin-table td.product-thumb-cell::before {
+    content: none;
+  }
 
   .admin-table td .table-actions {
     display: flex;
@@ -1005,27 +1005,11 @@ button {
     display: inline-flex;
     margin-top: 0;
   }
-}
-
-@media (max-width: 768px) {
-  .admin-table tbody {
-    justify-content: stretch;
-  }
-
-  .admin-table tr {
-    width: 100%;
-  }
 
   .admin-table th,
   .admin-table td {
     padding: 0.75rem 0.85rem;
     font-size: 0.82rem;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1024px) {
-  .admin-table tr {
-    width: calc(50% - 0.5rem);
   }
 }
 
