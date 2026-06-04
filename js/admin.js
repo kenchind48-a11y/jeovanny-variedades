@@ -49,6 +49,18 @@ function mostrarEstadisticasAdmin() {
 }
 
 function renderizarProductosAdmin() {
+  // Usar matchMedia para detectar viewport en lugar de window.innerWidth
+  // Esto es más confiable para media queries
+  const isMobile = window.matchMedia('(max-width: 768px)').matches || window.innerWidth <= 768;
+  
+  if (isMobile) {
+    renderizarProductosAdminMobile();
+  } else {
+    renderizarProductosAdminDesktop();
+  }
+}
+
+function renderizarProductosAdminDesktop() {
   const tbody = document.getElementById('productsTableBody');
   if (!tbody) return;
 
@@ -81,7 +93,9 @@ function renderizarProductosAdmin() {
     const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen);
     const imagenHtml = tieneImagen
       ? `<img src="${producto.imagen}" alt="${producto.nombre}">`
-      : `<span class="thumb-placeholder">📦</span>`;
+      : (producto.imagen
+          ? `<span class="thumb-emoji">${producto.imagen}</span>`
+          : `<span class="thumb-placeholder">📦</span>`);
 
     return `
       <tr data-producto-id="${producto.id}">
@@ -99,6 +113,78 @@ function renderizarProductosAdmin() {
           </div>
         </td>
       </tr>
+    `;
+  }).join('');
+}
+
+function renderizarProductosAdminMobile() {
+  const container = document.getElementById('cardsViewContainer');
+  if (!container) return;
+
+  let productos = obtenerProductos();
+  const termino = adminState.busqueda.trim().toLowerCase();
+
+  if (termino) {
+    productos = productos.filter(producto => {
+      return producto.nombre.toLowerCase().includes(termino) ||
+             producto.categoria.toLowerCase().includes(termino) ||
+             producto.descripcion.toLowerCase().includes(termino);
+    });
+  }
+
+  if (productos.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:2rem; color:#808080;">
+        No hay productos que coincidan con la búsqueda.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = productos.map(producto => {
+    const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
+    const estadoClass = producto.disponible ? 'available' : 'unavailable';
+    const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
+    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen);
+    const imagenHtml = tieneImagen
+      ? `<img src="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
+      : (producto.imagen
+          ? `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">${producto.imagen}</span>`
+          : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`);
+
+    return `
+      <div class="product-card-mobile" data-producto-id="${producto.id}">
+        <div class="product-card-image">
+          ${imagenHtml}
+        </div>
+        <div class="product-card-content">
+          <div class="product-card-field">
+            <span class="product-card-label">ID</span>
+            <span class="product-card-value">${producto.id}</span>
+          </div>
+          <div class="product-card-field">
+            <span class="product-card-label">Nombre</span>
+            <span class="product-card-value">${producto.nombre}</span>
+          </div>
+          <div class="product-card-field">
+            <span class="product-card-label">Categoría</span>
+            <span class="product-card-value">${producto.categoria}</span>
+          </div>
+          <div class="product-card-field">
+            <span class="product-card-label">Precio</span>
+            <span class="product-card-value">$${producto.precio.toFixed(2)}</span>
+          </div>
+          <div class="product-card-field">
+            <span class="product-card-label">Estado</span>
+            <span class="availability ${estadoClass}">${estadoTexto}</span>
+          </div>
+        </div>
+        <div class="product-card-actions">
+          <button type="button" class="btn-secondary" data-action="toggle-disponibilidad">${botonDisponibilidad}</button>
+          <button type="button" class="btn-primary" data-action="editar-producto">Editar</button>
+          <button type="button" class="btn-secondary" data-action="eliminar-producto">Eliminar</button>
+        </div>
+      </div>
     `;
   }).join('');
 }
@@ -752,8 +838,29 @@ function configurarEventosAdmin() {
   document.getElementById('productsTableBody')?.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
-    const row = button.closest('tr');
+    const row = button.closest('tr') || button.closest('[data-producto-id]');
     const productoId = Number(row?.dataset.productoId);
+    if (!productoId) return;
+
+    switch (button.dataset.action) {
+      case 'editar-producto':
+        abrirFormularioProducto(obtenerProductoPorId(productoId));
+        break;
+      case 'eliminar-producto':
+        eliminarProductoAdmin(productoId);
+        break;
+      case 'toggle-disponibilidad':
+        alternarDisponibilidadProducto(productoId);
+        break;
+    }
+  });
+
+  // Event listener para tarjetas móviles
+  document.getElementById('cardsViewContainer')?.addEventListener('click', event => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const card = button.closest('[data-producto-id]');
+    const productoId = Number(card?.dataset.productoId);
     if (!productoId) return;
 
     switch (button.dataset.action) {
@@ -824,6 +931,15 @@ function configurarEventosAdmin() {
     if (event.key === 'Escape') {
       cerrarModal();
     }
+  });
+
+  // Event listener para cambios de tamaño de ventana (responsivo)
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      renderizarProductosAdmin();
+    }, 250);
   });
 }
 

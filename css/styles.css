@@ -912,104 +912,129 @@ button {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* Estilos base para vistas de escritorio */
+#tableViewContainer {
+  display: block;
+}
+
+#cardsViewContainer {
+  display: none;
+}
+
+/* Media queries móvil */
 @media (max-width: 768px) {
-  .table-wrapper {
-    overflow-x: hidden;
+  /* Ocultar tabla, mostrar tarjetas */
+  #tableViewContainer {
+    display: none !important;
   }
 
-  .admin-table {
-    display: block;
-  }
-
-  .admin-table thead {
-    display: none;
-  }
-
-  .admin-table tbody {
-    display: block;
-    padding: 0;
+  #cardsViewContainer {
+    display: grid !important;
     gap: 1rem;
+    grid-template-columns: 1fr;
   }
 
-  .admin-table tr {
-    display: block;
-    width: 100%;
-    padding: 0.85rem 1rem;
+  /* Estilos de tarjeta para móvil */
+  .product-card-mobile {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 28px;
-    box-shadow: none;
-    margin-bottom: 1rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
   }
 
-  .admin-table td {
-    display: block;
-    width: 100%;
-    padding: 0;
-    border: none;
-    white-space: normal;
-    word-break: normal;
-    overflow-wrap: normal;
+  .product-card-mobile:active {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
-  .admin-table td.product-thumb-cell {
-    padding: 0;
-    width: 100%;
-    min-width: auto;
-  }
-
-  .admin-table td.product-thumb-cell .product-thumb {
+  .product-card-image {
     width: 100%;
     height: clamp(180px, 45vw, 250px);
-    border-radius: 24px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
   }
 
-  .admin-table td.product-thumb-cell .thumb-placeholder {
-    font-size: 1.8rem;
-  }
-
-  .admin-table td:not(.product-thumb-cell):not(:last-child) {
-    padding-bottom: 0.85rem;
-  }
-
-  .admin-table td:not(.product-thumb-cell)::before {
+  .product-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     display: block;
-    content: '';
-    color: var(--muted);
+  }
+
+  .product-card-content {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+  }
+
+  .product-card-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .product-card-label {
     font-size: 0.78rem;
     font-weight: 600;
-    margin-bottom: 0.35rem;
+    color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
 
-  .admin-table td:nth-child(2)::before { content: 'ID'; }
-  .admin-table td:nth-child(3)::before { content: 'Nombre'; }
-  .admin-table td:nth-child(4)::before { content: 'Categoría'; }
-  .admin-table td:nth-child(5)::before { content: 'Precio'; }
-  .admin-table td:nth-child(6)::before { content: 'Estado'; }
-  .admin-table td:nth-child(7)::before { content: 'Acciones'; }
-
-  .admin-table td.product-thumb-cell::before {
-    content: none;
+  .product-card-value {
+    font-size: 0.95rem;
+    color: #e8e8e8;
+    word-break: break-word;
   }
 
-  .admin-table td .table-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: flex-start;
-  }
-
-  .admin-table td .availability {
+  .product-card-mobile .availability {
     display: inline-flex;
-    margin-top: 0;
+    width: fit-content;
   }
 
-  .admin-table th,
-  .admin-table td {
-    padding: 0.75rem 0.85rem;
-    font-size: 0.82rem;
+  .product-card-actions {
+    padding: 0 1rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .product-card-actions button {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    font-weight: 500;
+  }
+
+  .product-card-actions .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .product-card-actions .btn-primary:active {
+    opacity: 0.8;
+  }
+
+  .product-card-actions .btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e8e8e8;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .product-card-actions .btn-secondary:active {
+    background: rgba(255, 255, 255, 0.12);
   }
 }
 
