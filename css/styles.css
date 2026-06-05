@@ -723,7 +723,7 @@ button {
 
 .admin-shell,
 .chat-shell {
-  width: min(480px, 100%);
+  width: min(1100px, 100%);
   margin: 0 auto;
   padding-bottom: calc(2rem + env(safe-area-inset-bottom));
 }

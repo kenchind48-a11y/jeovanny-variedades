@@ -11,6 +11,7 @@ const adminState = {
 };
 
 function inicializarAdmin() {
+  console.log('ADMIN INICIADO');
   inicializarDatos();
   renderizarTabActual();
   renderizarProductosAdmin();
@@ -52,17 +53,23 @@ function renderizarProductosAdmin() {
   // Usar matchMedia para detectar viewport en lugar de window.innerWidth
   // Esto es más confiable para media queries
   const isMobile = window.matchMedia('(max-width: 768px)').matches || window.innerWidth <= 768;
-  
-  if (isMobile) {
-    renderizarProductosAdminMobile();
-  } else {
-    renderizarProductosAdminDesktop();
-  }
+  const productos = obtenerProductos();
+  console.log('Productos encontrados:', productos.length);
+  console.log(productos);
+  console.log('Admin render mode:', isMobile ? 'mobile' : 'desktop');
+
+  // Pre-render both views para que el contenido esté disponible
+  // aunque el CSS cambie entre vista de tabla y tarjetas.
+  renderizarProductosAdminDesktop();
+  renderizarProductosAdminMobile();
 }
 
 function renderizarProductosAdminDesktop() {
   const tbody = document.getElementById('productsTableBody');
-  if (!tbody) return;
+  if (!tbody) {
+    console.error('[admin] No se encontró tbody#productsTableBody');
+    return;
+  }
 
   let productos = obtenerProductos();
   const termino = adminState.busqueda.trim().toLowerCase();
@@ -86,7 +93,8 @@ function renderizarProductosAdminDesktop() {
     return;
   }
 
-  tbody.innerHTML = productos.map(producto => {
+  try {
+    tbody.innerHTML = productos.map(producto => {
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
@@ -108,7 +116,7 @@ function renderizarProductosAdminDesktop() {
         <td>${producto.id}</td>
         <td>${producto.nombre}</td>
         <td>${producto.categoria}</td>
-        <td>$${producto.precio.toFixed(2)}</td>
+        <td>$${Number(producto.precio || 0).toFixed(2)}</td>
         <td><span class="availability ${estadoClass}">${estadoTexto}</span></td>
         <td>
           <div class="table-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
@@ -122,11 +130,17 @@ function renderizarProductosAdminDesktop() {
   }).join('');
   // Cargar imágenes desde IndexedDB (si las hay)
   if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(tbody);
+  } catch (error) {
+    console.error('[admin] Error renderizando productos desktop:', error);
+  }
 }
 
 function renderizarProductosAdminMobile() {
   const container = document.getElementById('cardsViewContainer');
-  if (!container) return;
+  if (!container) {
+    console.error('[admin] No se encontró div#cardsViewContainer');
+    return;
+  }
 
   let productos = obtenerProductos();
   const termino = adminState.busqueda.trim().toLowerCase();
@@ -148,7 +162,8 @@ function renderizarProductosAdminMobile() {
     return;
   }
 
-  container.innerHTML = productos.map(producto => {
+  try {
+    container.innerHTML = productos.map(producto => {
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
@@ -184,7 +199,7 @@ function renderizarProductosAdminMobile() {
           </div>
           <div class="product-card-field">
             <span class="product-card-label">Precio</span>
-            <span class="product-card-value">$${producto.precio.toFixed(2)}</span>
+            <span class="product-card-value">$${Number(producto.precio || 0).toFixed(2)}</span>
           </div>
           <div class="product-card-field">
             <span class="product-card-label">Estado</span>
@@ -200,6 +215,9 @@ function renderizarProductosAdminMobile() {
     `;
   }).join('');
   if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(container);
+  } catch (error) {
+    console.error('[admin] Error renderizando productos mobile:', error);
+  }
 }
 
 function abrirFormularioProducto(producto = null) {
@@ -894,7 +912,7 @@ function configurarEventosAdmin() {
         eliminarProductoAdmin(productoId);
         break;
       case 'toggle-disponibilidad':
-        alternarDisponibilidadProducto(productoId);
+        cambiarDisponibilidadProducto(productoId);
         break;
     }
   });
