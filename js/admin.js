@@ -10,9 +10,9 @@ const adminState = {
   busqueda: ''
 };
 
-function inicializarAdmin() {
+async function inicializarAdmin() {
   console.log('ADMIN INICIADO');
-  inicializarDatos();
+  await inicializarDatos();
   renderizarTabActual();
   renderizarProductosAdmin();
   renderizarCategoriasAdmin();
@@ -23,7 +23,17 @@ function inicializarAdmin() {
 }
 
 function mostrarEstadisticasAdmin() {
-  const productos = obtenerProductos();
+  let productos;
+  try {
+    productos = JSON.parse(localStorage.getItem('jv_productos') || '[]');
+  } catch (error) {
+    console.warn('[admin] Error parseando jv_productos desde localStorage:', error);
+    productos = obtenerProductos();
+  }
+
+  console.log('TOTAL PRODUCTOS:', productos.length);
+  console.log('PRODUCTOS:', productos);
+
   const estadisticas = {
     totalProductos: productos.length,
     productosDisponibles: productos.filter(item => item.disponible).length,
@@ -95,22 +105,18 @@ function renderizarProductosAdminDesktop() {
 
   try {
     tbody.innerHTML = productos.map(producto => {
-    const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
-    const estadoClass = producto.disponible ? 'available' : 'unavailable';
-    const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
-    let imagenHtml;
-    if (tieneImagen) {
-      if (producto.imagen.startsWith('idb:')) {
-        imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}">`;
-      } else {
-        imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}">`;
-      }
-    } else {
-      imagenHtml = producto.imagen ? `<span class="thumb-emoji">${producto.imagen}</span>` : `<span class="thumb-placeholder">📦</span>`;
-    }
+      const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
+      const estadoClass = producto.disponible ? 'available' : 'unavailable';
+      const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
+      const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
+        ? window.obtenerImagenIdDeProducto(producto)
+        : (producto.imagenId ?? null);
+      const tieneImagen = Number.isFinite(imagenId);
+      const imagenHtml = tieneImagen
+        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}">`
+        : `<span class="thumb-placeholder">📦</span>`;
 
-    return `
+      return `
       <tr data-producto-id="${producto.id}">
         <td class="product-thumb-cell"><div class="product-thumb">${imagenHtml}</div></td>
         <td>${producto.id}</td>
@@ -126,10 +132,10 @@ function renderizarProductosAdminDesktop() {
           </div>
         </td>
       </tr>
-    `;
-  }).join('');
-  // Cargar imágenes desde IndexedDB (si las hay)
-  if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(tbody);
+      `;
+    }).join('');
+    // Cargar imágenes desde IndexedDB (si las hay)
+    if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(tbody);
   } catch (error) {
     console.error('[admin] Error renderizando productos desktop:', error);
   }
@@ -164,22 +170,18 @@ function renderizarProductosAdminMobile() {
 
   try {
     container.innerHTML = productos.map(producto => {
-    const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
-    const estadoClass = producto.disponible ? 'available' : 'unavailable';
-    const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
-    let imagenHtml;
-    if (tieneImagen) {
-      if (producto.imagen.startsWith('idb:')) {
-        imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`;
-      } else {
-        imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`;
-      }
-    } else {
-      imagenHtml = producto.imagen ? `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">${producto.imagen}</span>` : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`;
-    }
+      const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
+      const estadoClass = producto.disponible ? 'available' : 'unavailable';
+      const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
+      const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
+        ? window.obtenerImagenIdDeProducto(producto)
+        : (producto.imagenId ?? null);
+      const tieneImagen = Number.isFinite(imagenId);
+      const imagenHtml = tieneImagen
+        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
+        : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`;
 
-    return `
+      return `
       <div class="product-card-mobile" data-producto-id="${producto.id}">
         <div class="product-card-image">
           ${imagenHtml}
@@ -212,9 +214,9 @@ function renderizarProductosAdminMobile() {
           <button type="button" class="btn-secondary" data-action="eliminar-producto">Eliminar</button>
         </div>
       </div>
-    `;
-  }).join('');
-  if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(container);
+      `;
+    }).join('');
+    if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(container);
   } catch (error) {
     console.error('[admin] Error renderizando productos mobile:', error);
   }
@@ -418,9 +420,9 @@ function configurarImagenProducto(producto) {
   const preview = document.getElementById('productImagePreview');
   const placeholder = document.getElementById('productImagePlaceholder');
   const selectButton = document.getElementById('selectProductImageButton');
-  const imagenInicial = producto?.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen) ? producto.imagen : '';
+  const imagenIdInicial = producto ? (typeof window.obtenerImagenIdDeProducto === 'function' ? window.obtenerImagenIdDeProducto(producto) : producto.imagenId || null) : null;
 
-  mostrarPreviewImagen(imagenInicial);
+  mostrarPreviewImagen(imagenIdInicial);
 
   inputFile?.addEventListener('change', async () => {
     const file = inputFile.files?.[0];
@@ -451,20 +453,22 @@ function configurarImagenProducto(producto) {
   selectButton?.addEventListener('click', () => inputFile?.click());
 }
 
-function mostrarPreviewImagen(src) {
+async function mostrarPreviewImagen(src) {
   const preview = document.getElementById('productImagePreview');
   const placeholder = document.getElementById('productImagePlaceholder');
   if (!preview || !placeholder) return;
 
-  if (typeof src === 'string' && src.startsWith('idb:')) {
-    // Mostrar placeholder mientras cargamos desde IDB
+  const imageId = typeof src === 'number'
+      ? src
+      : (typeof src === 'string' && src.startsWith('idb:') ? Number(src.split(':')[1]) : null);
+
+  if (Number.isFinite(imageId)) {
     preview.removeAttribute('src');
-    preview.dataset.idb = src;
+    preview.dataset.imageId = imageId;
     preview.classList.remove('hidden');
     placeholder.classList.add('hidden');
     if (window.cargarImagenesDesdeIDB) {
-      // intentamos cargar inmediatamente
-      window.cargarImagenesDesdeIDB(preview.parentElement || document);
+      await window.cargarImagenesDesdeIDB(preview.parentElement || document);
     }
     return;
   }
@@ -474,12 +478,12 @@ function mostrarPreviewImagen(src) {
     preview.src = src;
     preview.classList.remove('hidden');
     placeholder.classList.add('hidden');
-    preview.removeAttribute('data-idb');
+    preview.removeAttribute('data-image-id');
   } else {
     preview.src = '';
     preview.classList.add('hidden');
     placeholder.classList.remove('hidden');
-    preview.removeAttribute('data-idb');
+    preview.removeAttribute('data-image-id');
   }
 }
 
@@ -506,7 +510,8 @@ async function manejarEnvioProducto(event) {
     categoria: form.categoria.value.trim() || 'Sin categoría',
     descripcion: form.descripcion.value.trim(),
     precio: Number(form.precio.value),
-    imagen: archivoImagen ? await leerImagen(archivoImagen) : (adminState.productoEnEdicion?.imagen || '📦'),
+    imagenFile: archivoImagen || null,
+    imagenId: adminState.productoEnEdicion ? adminState.productoEnEdicion.imagenId ?? null : null,
     disponible: form.disponible?.checked === true
   };
 
@@ -519,33 +524,32 @@ async function manejarEnvioProducto(event) {
     return;
   }
 
-  if (adminState.productoEnEdicion) {
-    console.log('[admin] Productos antes de actualizar:', obtenerProductos().length);
-    const actualizado = actualizarProducto(adminState.productoEnEdicion.id, datos);
-    if (actualizado) {
+  try {
+    if (adminState.productoEnEdicion) {
+      console.log('[admin] Productos antes de actualizar:', obtenerProductos().length);
+      const actualizado = await actualizarProducto(adminState.productoEnEdicion.id, datos);
+      if (!actualizado) {
+        throw new Error('No se pudo actualizar el producto.');
+      }
       console.log('[admin] Producto actualizado. Productos ahora:', obtenerProductos().length);
       mostrarNotificacionAdmin('✅ Producto actualizado correctamente');
     } else {
-      console.error('[admin] Error al actualizar producto en storage');
-      mostrarNotificacionAdmin('❌ Error al actualizar producto (storage)', 'error');
-      return;
-    }
-  } else {
-    console.log('[admin] Productos antes de guardar:', obtenerProductos().length);
-    const creado = guardarProducto(datos);
-    if (creado) {
+      console.log('[admin] Productos antes de guardar:', obtenerProductos().length);
+      const creado = await guardarProducto(datos);
+      if (!creado) {
+        throw new Error('No se pudo guardar el producto.');
+      }
       console.log('[admin] Producto creado. Productos ahora:', obtenerProductos().length);
       mostrarNotificacionAdmin('✅ Producto creado correctamente');
-    } else {
-      console.error('[admin] Error al guardar producto en storage');
-      mostrarNotificacionAdmin('❌ Error al guardar producto (storage)', 'error');
-      return;
     }
-  }
 
-  cerrarModal();
-  renderizarProductosAdmin();
-  mostrarEstadisticasAdmin();
+    cerrarModal();
+    renderizarProductosAdmin();
+    mostrarEstadisticasAdmin();
+  } catch (error) {
+    console.error('[admin] Error guardando/actualizando producto:', error);
+    mostrarNotificacionAdmin(`❌ ${error.message || 'Error al procesar el producto.'}`, 'error');
+  }
 }
 
 function eliminarProductoAdmin(id) {
@@ -560,11 +564,11 @@ function eliminarProductoAdmin(id) {
   }
 }
 
-function cambiarDisponibilidadProducto(id) {
+async function cambiarDisponibilidadProducto(id) {
   const producto = obtenerProductoPorId(id);
   if (!producto) return;
 
-  actualizarProducto(id, { disponible: !producto.disponible });
+  await actualizarProducto(id, { disponible: !producto.disponible });
   renderizarProductosAdmin();
   mostrarEstadisticasAdmin();
 }

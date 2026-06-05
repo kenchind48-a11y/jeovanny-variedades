@@ -10,8 +10,8 @@ const appState = {
     soloDisponibles: false
 };
 
-function inicializarApp() {
-    inicializarDatos();
+async function inicializarApp() {
+    await inicializarDatos();
     renderizarCategorias();
     renderizarProductos();
     actualizarContador();
@@ -182,17 +182,13 @@ function crearTarjetaProducto(producto) {
     const seleccionado = obtenerSeleccionados().includes(producto.id);
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
-    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
-    let imagenHtml;
-    if (tieneImagen) {
-        if (producto.imagen.startsWith('idb:')) {
-            imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}">`;
-        } else {
-            imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}">`;
-        }
-    } else {
-        imagenHtml = `<span>${producto.imagen || '📦'}</span>`;
-    }
+    const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
+        ? window.obtenerImagenIdDeProducto(producto)
+        : (producto.imagenId ?? null);
+    const tieneImagen = Number.isFinite(imagenId);
+    const imagenHtml = tieneImagen
+        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}">`
+        : `<span>📦</span>`;
 
     card.innerHTML = `
         <div class="product-hero">${imagenHtml}</div>
