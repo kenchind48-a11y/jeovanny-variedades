@@ -20,6 +20,163 @@ function leerStorage(key) {
     }
 }
 
+function _tamanoCadena(cadena) {
+    return cadena ? new Blob([cadena]).size : 0;
+}
+
+function tamanoStorageProductosHumano() {
+    try {
+        const datos = localStorage.getItem(STORAGE_KEYS.PRODUCTOS);
+        const bytes = _tamanoCadena(datos);
+        if (!bytes) return '0 B';
+        const unidades = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        let val = bytes;
+        while (val >= 1024 && i < unidades.length - 1) { val /= 1024; i++; }
+        return `${val.toFixed(2)} ${unidades[i]}`;
+    } catch (e) {
+        return 'n/a';
+    }
+}
+
+/* IndexedDB para imágenes */
+let _imageDBPromise = null;
+function initImageDB() {
+    if (_imageDBPromise) return _imageDBPromise;
+    _imageDBPromise = new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) {
+            reject(new Error('IndexedDB no disponible'));
+            return;
+        }
+        const req = indexedDB.open('jv_images', 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains('images')) {
+                db.createObjectStore('images', { keyPath: 'id', autoIncrement: true });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Error abriendo IDB'));
+    });
+    return _imageDBPromise;
+}
+
+function _base64ToBlob(base64, mime) {
+    const binStr = atob(base64);
+    const len = binStr.length;
+    const arr = new Uint8Array(len);
+    for (let i = 0; i < len; i++) arr[i] = binStr.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+}
+
+async function storeImageFromDataUrl(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return null;
+    const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+    if (!m) return null;
+    const mime = m[1];
+    const base64 = m[2];
+    const blob = _base64ToBlob(base64, mime);
+    const db = await initImageDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readwrite');
+        const store = tx.objectStore('images');
+        const req = store.add({ blob, mime, created: new Date().toISOString() });
+        req.onsuccess = () => {
+            const id = req.result;
+            tx.oncomplete = () => resolve(id);
+        };
+        req.onerror = () => reject(req.error || new Error('Error almacenando imagen'));
+    });
+}
+
+async function getImageBlobByKey(ref) {
+    if (!ref || !ref.startsWith('idb:')) return null;
+    const id = Number(ref.split(':')[1]);
+    if (!Number.isFinite(id)) return null;
+    const db = await initImageDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readonly');
+        const store = tx.objectStore('images');
+        const req = store.get(id);
+        req.onsuccess = () => {
+            const record = req.result;
+            resolve(record ? record.blob : null);
+        };
+        req.onerror = () => reject(req.error || new Error('Error leyendo imagen IDB'));
+    });
+}
+
+async function getImageObjectUrl(ref) {
+    const blob = await getImageBlobByKey(ref);
+    if (!blob) return null;
+    return URL.createObjectURL(blob);
+}
+
+async function deleteImageByKey(ref) {
+    if (!ref || !ref.startsWith('idb:')) return false;
+    const id = Number(ref.split(':')[1]);
+    if (!Number.isFinite(id)) return false;
+    const db = await initImageDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readwrite');
+        const store = tx.objectStore('images');
+        const req = store.delete(id);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error || new Error('Error eliminando imagen IDB'));
+    });
+}
+
+async function migrarImagenesALocalIDB() {
+    try {
+        const productos = obtenerProductos();
+        let cambios = false;
+        for (let i = 0; i < productos.length; i++) {
+            const p = productos[i];
+            if (p && typeof p.imagen === 'string' && p.imagen.startsWith('data:image/')) {
+                try {
+                    const id = await storeImageFromDataUrl(p.imagen);
+                    if (id) {
+                        p.imagen = `idb:${id}`;
+                        cambios = true;
+                        console.log('[storage][migrate] Migrada imagen de producto', p.id, '-> idb:' + id);
+                    }
+                } catch (e) {
+                    console.warn('[storage][migrate] No se pudo migrar imagen de producto', p.id, e);
+                }
+            }
+        }
+        if (cambios) {
+            escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+            console.log('[storage][migrate] Migración completada. Tamaño jv_productos:', tamanoStorageProductosHumano());
+        }
+    } catch (e) {
+        console.warn('[storage][migrate] Error durante migración:', e);
+    }
+}
+
+// Función utilitaria para que UI cargue imágenes desde IDB
+window.cargarImagenesDesdeIDB = async function(root = document) {
+    try {
+        const imgs = Array.from((root || document).querySelectorAll('img[data-idb]'));
+        for (const img of imgs) {
+            const ref = img.dataset.idb;
+            if (!ref) continue;
+            try {
+                const url = await getImageObjectUrl(ref);
+                if (url) {
+                    img.src = url;
+                    img.classList.remove('hidden');
+                    img.removeAttribute('data-idb');
+                }
+            } catch (e) {
+                console.warn('[storage] Error cargando imagen IDB', ref, e);
+            }
+        }
+    } catch (e) {
+        console.warn('[storage] cargarImagenesDesdeIDB fallo', e);
+    }
+};
+
 function escribirStorage(key, value) {
     try {
         localStorage.setItem(key, JSON.stringify(value));
@@ -42,12 +199,53 @@ function guardarProducto(producto) {
         precio: Number.isFinite(precio) ? precio : 0,
         descripcion: producto.descripcion || '',
         disponible: producto.disponible === true,
-        imagen: producto.imagen || '📦',
+        // No almacenar data URLs en localStorage: si es data URL, guardamos placeholder y migramos a IDB async
+        imagen: (typeof producto.imagen === 'string' && producto.imagen.startsWith('data:image/')) ? '📦' : (producto.imagen || '📦'),
         fechaCreacion: new Date().toISOString()
     };
+    console.log('[storage] Productos antes de guardar:', productos.length);
     productos.push(nuevoProducto);
-    escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
-    return nuevoProducto;
+    try {
+        escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+        console.log('[storage] Producto guardado. Productos ahora:', obtenerProductos().length);
+        console.log('[storage] Tamaño jv_productos:', tamanoStorageProductosHumano());
+        // Si el producto original incluía una data URL, guardarla en IDB y actualizar la referencia
+        if (typeof producto.imagen === 'string' && producto.imagen.startsWith('data:image/')) {
+            (async () => {
+                try {
+                    const id = await storeImageFromDataUrl(producto.imagen);
+                    if (id) {
+                        console.log('[storage] Imagen almacenada en IDB id=', id, 'para producto', nuevoProducto.id);
+                        actualizarProducto(nuevoProducto.id, { imagen: 'idb:' + id });
+                    }
+                } catch (e) {
+                    console.warn('[storage] No se pudo almacenar imagen en IDB:', e);
+                }
+            })();
+        }
+        return nuevoProducto;
+    } catch (e) {
+        const mensaje = (e && (e.name || '')).toString().toLowerCase();
+        const esQuota = mensaje.includes('quota') || mensaje.includes('exceeded') || (e && e.code === 22);
+        console.warn('[storage] Error al escribir productos en localStorage:', e);
+        if (esQuota && nuevoProducto.imagen && typeof nuevoProducto.imagen === 'string') {
+            console.warn('[storage] Posible QuotaExceededError por imagen base64. Intentando guardar sin la imagen.');
+            // Eliminar imagen y reintentar
+            nuevoProducto.imagen = '📦';
+            // Reemplazar el último elemento
+            productos[productos.length - 1] = nuevoProducto;
+            try {
+                escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+                console.log('[storage] Guardado exitoso sin imagen. Productos ahora:', obtenerProductos().length);
+                console.log('[storage] Tamaño jv_productos:', tamanoStorageProductosHumano());
+                return nuevoProducto;
+            } catch (e2) {
+                console.error('[storage] Segundo intento falló:', e2);
+                return null;
+            }
+        }
+        return null;
+    }
 }
 
 function actualizarProducto(id, datosActualizados) {
@@ -60,24 +258,72 @@ function actualizarProducto(id, datosActualizados) {
         ? datosActualizados.disponible
         : productos[index].disponible;
 
+    // Si se recibe una data URL en datosActualizados.imagen, no la guardamos directamente en localStorage.
+    const esDataImage = typeof datosActualizados.imagen === 'string' && datosActualizados.imagen.startsWith('data:image/');
+    const imagenTemporal = esDataImage ? productos[index].imagen || '📦' : datosActualizados.imagen;
+
     productos[index] = {
         ...productos[index],
         ...datosActualizados,
+        imagen: imagenTemporal,
         precio: Number.isFinite(precioActualizado) ? precioActualizado : productos[index].precio,
         disponible: disponibleActualizado,
         id: productos[index].id,
         fechaCreacion: productos[index].fechaCreacion
     };
-    escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
-    return true;
+    try {
+        escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+        console.log('[storage] Producto actualizado. Tamaño jv_productos:', tamanoStorageProductosHumano());
+        // Si la imagen era data URL, almacenarla en IDB y actualizar la referencia
+        if (esDataImage) {
+            (async () => {
+                try {
+                    const imageId = await storeImageFromDataUrl(datosActualizados.imagen);
+                    if (imageId) {
+                        console.log('[storage] Imagen almacenada en IDB id=', imageId, 'para producto', id);
+                        // actualizar el producto para apuntar a la referencia en IDB
+                        actualizarProducto(id, { imagen: 'idb:' + imageId });
+                    }
+                } catch (e) {
+                    console.warn('[storage] No se pudo almacenar imagen en IDB al actualizar:', e);
+                }
+            })();
+        }
+        return true;
+    } catch (e) {
+        const mensaje = (e && (e.name || '')).toString().toLowerCase();
+        const esQuota = mensaje.includes('quota') || mensaje.includes('exceeded') || (e && e.code === 22);
+        console.warn('[storage] Error al actualizar producto en localStorage:', e);
+        if (esQuota && datosActualizados.imagen) {
+            console.warn('[storage] QuotaExceededError al actualizar. Eliminando imagen y reintentando.');
+            delete productos[index].imagen;
+            try {
+                escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+                console.log('[storage] Actualizado exitoso sin imagen.');
+                return true;
+            } catch (e2) {
+                console.error('[storage] Reintento de actualización falló:', e2);
+                return false;
+            }
+        }
+        return false;
+    }
 }
 
 function eliminarProducto(id) {
     const productos = obtenerProductos();
     const index = productos.findIndex(item => item.id === id);
     if (index === -1) return false;
-    productos.splice(index, 1);
+    const [removed] = productos.splice(index, 1);
     escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+    // Si el producto eliminado tenía imagen almacenada en IDB, eliminarla también
+    try {
+        if (removed && typeof removed.imagen === 'string' && removed.imagen.startsWith('idb:')) {
+            deleteImageByKey(removed.imagen).catch(err => console.warn('[storage] No se pudo eliminar imagen IDB:', err));
+        }
+    } catch (e) {
+        console.warn('[storage] Error durante limpieza IDB al eliminar producto', e);
+    }
     return true;
 }
 
@@ -355,4 +601,14 @@ function mostrarToast(mensaje, tipo = 'success') {
     }, 3200);
 }
 
-document.addEventListener('DOMContentLoaded', inicializarDatos);
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        inicializarDatos();
+    } catch (e) {
+        console.warn('[storage] inicializarDatos fallo', e);
+    }
+    // Intentar migrar imágenes data URL existentes a IndexedDB (si hay)
+    migrarImagenesALocalIDB().catch(err => {
+        console.warn('[storage] migrarImagenesALocalIDB fallo', err);
+    });
+});

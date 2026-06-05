@@ -90,12 +90,17 @@ function renderizarProductosAdminDesktop() {
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen);
-    const imagenHtml = tieneImagen
-      ? `<img src="${producto.imagen}" alt="${producto.nombre}">`
-      : (producto.imagen
-          ? `<span class="thumb-emoji">${producto.imagen}</span>`
-          : `<span class="thumb-placeholder">📦</span>`);
+    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
+    let imagenHtml;
+    if (tieneImagen) {
+      if (producto.imagen.startsWith('idb:')) {
+        imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}">`;
+      } else {
+        imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}">`;
+      }
+    } else {
+      imagenHtml = producto.imagen ? `<span class="thumb-emoji">${producto.imagen}</span>` : `<span class="thumb-placeholder">📦</span>`;
+    }
 
     return `
       <tr data-producto-id="${producto.id}">
@@ -115,6 +120,8 @@ function renderizarProductosAdminDesktop() {
       </tr>
     `;
   }).join('');
+  // Cargar imágenes desde IndexedDB (si las hay)
+  if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(tbody);
 }
 
 function renderizarProductosAdminMobile() {
@@ -145,12 +152,17 @@ function renderizarProductosAdminMobile() {
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen);
-    const imagenHtml = tieneImagen
-      ? `<img src="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
-      : (producto.imagen
-          ? `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">${producto.imagen}</span>`
-          : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`);
+    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
+    let imagenHtml;
+    if (tieneImagen) {
+      if (producto.imagen.startsWith('idb:')) {
+        imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`;
+      } else {
+        imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`;
+      }
+    } else {
+      imagenHtml = producto.imagen ? `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">${producto.imagen}</span>` : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`;
+    }
 
     return `
       <div class="product-card-mobile" data-producto-id="${producto.id}">
@@ -187,6 +199,7 @@ function renderizarProductosAdminMobile() {
       </div>
     `;
   }).join('');
+  if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(container);
 }
 
 function abrirFormularioProducto(producto = null) {
@@ -387,7 +400,7 @@ function configurarImagenProducto(producto) {
   const preview = document.getElementById('productImagePreview');
   const placeholder = document.getElementById('productImagePlaceholder');
   const selectButton = document.getElementById('selectProductImageButton');
-  const imagenInicial = producto?.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen) ? producto.imagen : '';
+  const imagenInicial = producto?.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen) ? producto.imagen : '';
 
   mostrarPreviewImagen(imagenInicial);
 
@@ -425,15 +438,30 @@ function mostrarPreviewImagen(src) {
   const placeholder = document.getElementById('productImagePlaceholder');
   if (!preview || !placeholder) return;
 
+  if (typeof src === 'string' && src.startsWith('idb:')) {
+    // Mostrar placeholder mientras cargamos desde IDB
+    preview.removeAttribute('src');
+    preview.dataset.idb = src;
+    preview.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    if (window.cargarImagenesDesdeIDB) {
+      // intentamos cargar inmediatamente
+      window.cargarImagenesDesdeIDB(preview.parentElement || document);
+    }
+    return;
+  }
+
   const esImagenValida = typeof src === 'string' && /^(data:image\/|https?:\/\/)/.test(src);
   if (src && esImagenValida) {
     preview.src = src;
     preview.classList.remove('hidden');
     placeholder.classList.add('hidden');
+    preview.removeAttribute('data-idb');
   } else {
     preview.src = '';
     preview.classList.add('hidden');
     placeholder.classList.remove('hidden');
+    preview.removeAttribute('data-idb');
   }
 }
 
@@ -474,11 +502,27 @@ async function manejarEnvioProducto(event) {
   }
 
   if (adminState.productoEnEdicion) {
-    actualizarProducto(adminState.productoEnEdicion.id, datos);
-    mostrarNotificacionAdmin('✅ Producto actualizado correctamente');
+    console.log('[admin] Productos antes de actualizar:', obtenerProductos().length);
+    const actualizado = actualizarProducto(adminState.productoEnEdicion.id, datos);
+    if (actualizado) {
+      console.log('[admin] Producto actualizado. Productos ahora:', obtenerProductos().length);
+      mostrarNotificacionAdmin('✅ Producto actualizado correctamente');
+    } else {
+      console.error('[admin] Error al actualizar producto en storage');
+      mostrarNotificacionAdmin('❌ Error al actualizar producto (storage)', 'error');
+      return;
+    }
   } else {
-    guardarProducto(datos);
-    mostrarNotificacionAdmin('✅ Producto creado correctamente');
+    console.log('[admin] Productos antes de guardar:', obtenerProductos().length);
+    const creado = guardarProducto(datos);
+    if (creado) {
+      console.log('[admin] Producto creado. Productos ahora:', obtenerProductos().length);
+      mostrarNotificacionAdmin('✅ Producto creado correctamente');
+    } else {
+      console.error('[admin] Error al guardar producto en storage');
+      mostrarNotificacionAdmin('❌ Error al guardar producto (storage)', 'error');
+      return;
+    }
   }
 
   cerrarModal();

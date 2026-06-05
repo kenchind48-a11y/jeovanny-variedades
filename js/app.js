@@ -172,6 +172,7 @@ function renderizarProductos() {
     if (emptyState) emptyState.classList.add('hidden');
     contenedor.innerHTML = '';
     productos.forEach(producto => contenedor.appendChild(crearTarjetaProducto(producto)));
+    if (window.cargarImagenesDesdeIDB) window.cargarImagenesDesdeIDB(contenedor);
 }
 
 function crearTarjetaProducto(producto) {
@@ -181,9 +182,17 @@ function crearTarjetaProducto(producto) {
     const seleccionado = obtenerSeleccionados().includes(producto.id);
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
-    const imagenHtml = producto.imagen && /^(data:image\/|https?:\/\/)/.test(producto.imagen)
-        ? `<img src="${producto.imagen}" alt="${producto.nombre}">`
-        : `<span>${producto.imagen || '📦'}</span>`;
+    const tieneImagen = producto.imagen && /^(data:image\/|https?:\/\/|idb:)/.test(producto.imagen);
+    let imagenHtml;
+    if (tieneImagen) {
+        if (producto.imagen.startsWith('idb:')) {
+            imagenHtml = `<img data-idb="${producto.imagen}" alt="${producto.nombre}">`;
+        } else {
+            imagenHtml = `<img src="${producto.imagen}" alt="${producto.nombre}">`;
+        }
+    } else {
+        imagenHtml = `<span>${producto.imagen || '📦'}</span>`;
+    }
 
     card.innerHTML = `
         <div class="product-hero">${imagenHtml}</div>
