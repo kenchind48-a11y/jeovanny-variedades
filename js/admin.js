@@ -458,6 +458,12 @@ async function mostrarPreviewImagen(src) {
   const placeholder = document.getElementById('productImagePlaceholder');
   if (!preview || !placeholder) return;
 
+  const previousUrl = preview.dataset.previewUrl;
+  if (previousUrl && previousUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(previousUrl);
+  }
+  preview.dataset.previewUrl = '';
+
   const imageId = typeof src === 'number'
       ? src
       : (typeof src === 'string' && src.startsWith('idb:') ? Number(src.split(':')[1]) : null);
@@ -473,9 +479,10 @@ async function mostrarPreviewImagen(src) {
     return;
   }
 
-  const esImagenValida = typeof src === 'string' && /^(data:image\/|https?:\/\/)/.test(src);
+  const esImagenValida = typeof src === 'string' && /^(blob:|https?:\/\/|\/)/.test(src);
   if (src && esImagenValida) {
     preview.src = src;
+    preview.dataset.previewUrl = src;
     preview.classList.remove('hidden');
     placeholder.classList.add('hidden');
     preview.removeAttribute('data-image-id');
@@ -488,17 +495,10 @@ async function mostrarPreviewImagen(src) {
 }
 
 function leerImagen(file) {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('El archivo debe ser una imagen.'));
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Error leyendo la imagen.'));
-    reader.readAsDataURL(file);
-  });
+  if (!file || !file.type.startsWith('image/')) {
+    return Promise.reject(new Error('El archivo debe ser una imagen.'));
+  }
+  return Promise.resolve(URL.createObjectURL(file));
 }
 
 async function manejarEnvioProducto(event) {

@@ -129,17 +129,11 @@ async function _compressImageBlob(blob) {
 }
 
 async function guardarImagen(input) {
-    let blob = null;
-    if (typeof input === 'string' && input.startsWith('data:image/')) {
-        blob = _dataUrlToBlob(input);
-    } else if (input instanceof Blob) {
-        blob = input;
-    }
-    if (!blob) {
-        throw new Error('La imagen no es válida o no se puede procesar.');
+    if (!(input instanceof Blob)) {
+        throw new Error('La imagen debe ser un Blob o File válido.');
     }
 
-    const optimizedBlob = await _compressImageBlob(blob);
+    const optimizedBlob = await _compressImageBlob(input);
     const db = await initImageDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction('images', 'readwrite');
@@ -204,7 +198,10 @@ async function migrarImagenesAIndexedDB() {
                     imagenId = _parseImageId(p.imagen);
                 } else if (p.imagen.startsWith('data:image/')) {
                     try {
-                        imagenId = await guardarImagen(p.imagen);
+                        const blob = _dataUrlToBlob(p.imagen);
+                        if (blob) {
+                            imagenId = await guardarImagen(blob);
+                        }
                     } catch (e) {
                         console.warn('[storage][migrate] No se pudo optimizar o guardar imagen de producto', p.id, e);
                     }
