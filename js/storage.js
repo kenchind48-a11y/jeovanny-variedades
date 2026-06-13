@@ -529,10 +529,23 @@ async function guardarProducto(producto, options = {}) {
     const precio = Number(producto.precio ?? 0);
     const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
 
+    // Protección: no permitir base64 en `producto.imagen`
+    if (producto && typeof producto.imagen === 'string' && producto.imagen.startsWith('data:image')) {
+        throw new Error('Bloqueado: base64 detectado');
+    }
+
     let imagenes = Array.isArray(producto.imagenes) ? producto.imagenes : [];
+    // Si vienen archivos, subirlos (pero luego borramos la referencia para no persistir los Files)
     if (Array.isArray(producto.imagenesFiles) && producto.imagenesFiles.length) {
         imagenes = await uploadImagesToCloudinary(producto.imagenesFiles, onProgress);
     }
+
+    // Asegurar que `producto.imagen` sea solo URL derivada de `imagenes` cuando existan
+    if (Array.isArray(producto.imagenes) && producto.imagenes.length) {
+        producto.imagen = producto.imagenes[0];
+    }
+    // Eliminar posibles referencias a File antes de persistir
+    if (producto && typeof producto.imagenesFiles !== 'undefined') delete producto.imagenesFiles;
 
     const nuevoProducto = {
         id: Date.now(),
@@ -542,10 +555,13 @@ async function guardarProducto(producto, options = {}) {
         descripcion: producto.descripcion || '',
         disponible: producto.disponible === true,
         imagenes: imagenes.length ? imagenes : [],
+        imagen: imagenes.length ? imagenes[0] : (typeof producto.imagen === 'string' && _isValidHttpUrl(producto.imagen) ? producto.imagen : null),
         imagenId: typeof producto.imagenId === 'number' && Number.isFinite(producto.imagenId) ? producto.imagenId : null,
         fechaCreacion: new Date().toISOString()
     };
 
+    // Mostrar el producto que se va a persistir (debe contener solo URLs, no base64)
+    console.log('[storage] Persistiendo producto:', { nombre: nuevoProducto.nombre, imagen: nuevoProducto.imagen });
     console.log('[storage] Productos antes de guardar:', obtenerProductos().length);
     const productos = obtenerProductos();
     productos.push(nuevoProducto);
@@ -571,6 +587,11 @@ async function actualizarProducto(id, datosActualizados, options = {}) {
         ? datosActualizados.disponible
         : productos[index].disponible;
 
+    // Protección: no permitir base64 en `datosActualizados.imagen`
+    if (datosActualizados && typeof datosActualizados.imagen === 'string' && datosActualizados.imagen.startsWith('data:image')) {
+        throw new Error('Bloqueado: base64 detectado');
+    }
+
     let imagenesActualizadas = Array.isArray(productos[index].imagenes) ? productos[index].imagenes : [];
     if (Array.isArray(datosActualizados.imagenesFiles) && datosActualizados.imagenesFiles.length) {
         try {
@@ -582,6 +603,13 @@ async function actualizarProducto(id, datosActualizados, options = {}) {
     } else if (Array.isArray(datosActualizados.imagenes)) {
         imagenesActualizadas = datosActualizados.imagenes;
     }
+
+    // Si hay un array `imagenes` enviado, asegurar que `imagen` apunte a la primera URL
+    if (Array.isArray(datosActualizados.imagenes) && datosActualizados.imagenes.length) {
+        datosActualizados.imagen = datosActualizados.imagenes[0];
+    }
+    // Eliminar referencia a Files antes de persistir
+    if (typeof datosActualizados.imagenesFiles !== 'undefined') delete datosActualizados.imagenesFiles;
 
     let imagenIdActualizado = productos[index].imagenId ?? null;
     if (typeof datosActualizados.imagenId !== 'undefined') {
@@ -595,17 +623,25 @@ async function actualizarProducto(id, datosActualizados, options = {}) {
         ...productos[index],
         ...datosActualizados,
         imagenes: imagenesActualizadas,
+        imagen: imagenesActualizadas.length ? imagenesActualizadas[0] : (typeof datosActualizados.imagen === 'string' && _isValidHttpUrl(datosActualizados.imagen) ? datosActualizados.imagen : productos[index].imagen ?? null),
         imagenId: imagenIdActualizado !== null ? imagenIdActualizado : null,
         precio: Number.isFinite(precioActualizado) ? precioActualizado : productos[index].precio,
         disponible: disponibleActualizado,
         id: productos[index].id,
         fechaCreacion: productos[index].fechaCreacion
     };
-    delete productos[index].imagen;
+    // Eliminar solo referencias a archivos temporales; conservar `imagen` (URL)
     delete productos[index].imagenFile;
     delete productos[index].imagenesFiles;
 
+    // Mostrar el producto actualizado que se persistirá
+    console.log('[storage] Persistiendo producto actualizado:', { nombre: productos[index].nombre, imagen: productos[index].imagen });
+
     try {
+        // Protección final: impedir persistir base64 en `imagen`
+        if (productos[index].imagen && typeof productos[index].imagen === 'string' && productos[index].imagen.startsWith('data:image')) {
+            throw new Error('Bloqueado: base64 detectado');
+        }
         escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
         console.log('[storage] Producto actualizado. Tamaño jv_productos:', tamanoStorageProductosHumano());
         return true;
