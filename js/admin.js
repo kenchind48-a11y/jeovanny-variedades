@@ -539,13 +539,27 @@ async function manejarEnvioProducto(event) {
   event.preventDefault();
   const form = event.target;
   const archivosImagenes = Array.from(form.imagen?.files || []);
+  const archivoImagen = archivosImagenes.length ? archivosImagenes[0] : null;
+
+  let imagenes = adminState.productoEnEdicion ? (Array.isArray(adminState.productoEnEdicion.imagenes) ? adminState.productoEnEdicion.imagenes : []) : [];
+  let imagen = adminState.productoEnEdicion?.imagen || null;
+
+  if (archivoImagen) {
+    if (typeof window.subirImagenCloudinary !== 'function') {
+      throw new Error('subirImagenCloudinary no está disponible');
+    }
+    imagen = await window.subirImagenCloudinary(archivoImagen);
+    imagenes = [imagen];
+  }
+
   const datos = {
     nombre: form.nombre.value.trim(),
     categoria: form.categoria.value.trim() || 'Sin categoría',
     descripcion: form.descripcion.value.trim(),
     precio: Number(form.precio.value),
-    imagenesFiles: archivosImagenes,
-    imagenes: adminState.productoEnEdicion ? Array.isArray(adminState.productoEnEdicion.imagenes) ? adminState.productoEnEdicion.imagenes : [] : [],
+    imagenesFiles: [],
+    imagenes,
+    imagen,
     imagenId: adminState.productoEnEdicion ? adminState.productoEnEdicion.imagenId ?? null : null,
     disponible: form.disponible?.checked === true
   };

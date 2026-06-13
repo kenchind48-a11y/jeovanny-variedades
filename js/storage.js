@@ -14,8 +14,8 @@ const IMAGE_MIGRATION_STATE_KEY = 'jv_imagenes_migradas';
 let legacyImageStorageEnabled = true;
 
 const CLOUDINARY_CONFIG = {
-    cloudName: 'YOUR_CLOUD_NAME',
-    uploadPreset: 'YOUR_UPLOAD_PRESET',
+    cloudName: 'ditlcnn6c',
+    uploadPreset: 'jeovanny_upload',
     folder: 'jeovanny_variedades'
 };
 
@@ -239,6 +239,8 @@ async function uploadImageToCloudinary(file, onProgress = () => {}) {
         xhr.send(formData);
     });
 }
+
+window.subirImagenCloudinary = uploadImageToCloudinary;
 
 async function uploadImagesToCloudinary(files, onProgress = () => {}) {
     if (!Array.isArray(files) || files.length === 0) return [];
