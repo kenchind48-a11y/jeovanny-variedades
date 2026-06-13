@@ -108,13 +108,16 @@ function renderizarProductosAdminDesktop() {
       const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
       const estadoClass = producto.disponible ? 'available' : 'unavailable';
       const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-      const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
-        ? window.obtenerImagenIdDeProducto(producto)
-        : (producto.imagenId ?? null);
-      const tieneImagen = Number.isFinite(imagenId);
-      const imagenHtml = tieneImagen
-        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}">`
-        : `<span class="thumb-placeholder">📦</span>`;
+      const imagenSource = typeof window.obtenerProductoImagenSource === 'function'
+        ? window.obtenerProductoImagenSource(producto)
+        : { url: null, imageId: null };
+      const tieneUrl = _isValidHttpUrl(imagenSource.url);
+      const tieneImagen = Number.isFinite(imagenSource.imageId);
+      const imagenHtml = tieneUrl
+        ? `<img src="${imagenSource.url}" alt="${producto.nombre}">`
+        : tieneImagen
+            ? `<img data-image-id="${imagenSource.imageId}" alt="${producto.nombre}">`
+            : `<span class="thumb-placeholder">📦</span>`;
 
       return `
       <tr data-producto-id="${producto.id}">
@@ -173,13 +176,16 @@ function renderizarProductosAdminMobile() {
       const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
       const estadoClass = producto.disponible ? 'available' : 'unavailable';
       const botonDisponibilidad = producto.disponible ? 'Marcar agotado' : 'Marcar disponible';
-      const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
-        ? window.obtenerImagenIdDeProducto(producto)
-        : (producto.imagenId ?? null);
-      const tieneImagen = Number.isFinite(imagenId);
-      const imagenHtml = tieneImagen
-        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
-        : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`;
+      const imagenSource = typeof window.obtenerProductoImagenSource === 'function'
+        ? window.obtenerProductoImagenSource(producto)
+        : { url: null, imageId: null };
+      const tieneUrl = _isValidHttpUrl(imagenSource.url);
+      const tieneImagen = Number.isFinite(imagenSource.imageId);
+      const imagenHtml = tieneUrl
+        ? `<img src="${imagenSource.url}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
+        : tieneImagen
+            ? `<img data-image-id="${imagenSource.imageId}" alt="${producto.nombre}" style="width:100%; height:100%; object-fit:cover; display:block;">`
+            : `<span style="display:grid; place-items:center; width:100%; height:100%; font-size:1.8rem;">📦</span>`;
 
       return `
       <div class="product-card-mobile" data-producto-id="${producto.id}">
@@ -278,12 +284,18 @@ function abrirFormularioProducto(producto = null) {
               </div>
               <div class="image-upload">
                 <div class="image-upload__dropzone" id="productImageDropzone">
-                  <input type="file" name="imagen" id="productImageInput" accept="image/*" class="image-upload__input">
+                  <input type="file" name="imagen" id="productImageInput" accept="image/*" multiple class="image-upload__input">
                   <div class="image-upload__placeholder" id="productImagePlaceholder">
                     <span class="image-upload__icon">📷</span>
-                    <p>Arrastra o selecciona un archivo</p>
-                    <small>JPG, PNG, GIF — max 5 MB</small>
+                    <p>Arrastra o selecciona uno o más archivos</p>
+                    <small>JPG, PNG, GIF — max 5 MB por imagen</small>
                     <button type="button" class="btn-secondary" id="selectProductImageButton">Seleccionar</button>
+                  </div>
+                  <div class="image-upload__meta hidden" id="productImageMeta">
+                    <span id="productImageCount"></span>
+                  </div>
+                  <div class="image-upload__progress hidden" id="productImageProgress">
+                    <div class="image-upload__progress-bar" id="productImageProgressBar"></div>
                   </div>
                   <img class="image-upload__preview hidden" id="productImagePreview" alt="Vista previa del producto">
                 </div>
@@ -420,15 +432,16 @@ function configurarImagenProducto(producto) {
   const preview = document.getElementById('productImagePreview');
   const placeholder = document.getElementById('productImagePlaceholder');
   const selectButton = document.getElementById('selectProductImageButton');
-  const imagenIdInicial = producto ? (typeof window.obtenerImagenIdDeProducto === 'function' ? window.obtenerImagenIdDeProducto(producto) : producto.imagenId || null) : null;
+  const imagenSource = producto ? (typeof window.obtenerProductoImagenSource === 'function' ? window.obtenerProductoImagenSource(producto) : { url: null, imageId: null }) : { url: null, imageId: null };
+  const imagenInicial = imagenSource.url || (Number.isFinite(imagenSource.imageId) ? imagenSource.imageId : null);
 
-  mostrarPreviewImagen(imagenIdInicial);
+  mostrarPreviewImagen(imagenInicial);
 
   inputFile?.addEventListener('change', async () => {
-    const file = inputFile.files?.[0];
-    if (!file) return;
-    const src = await leerImagen(file);
-    mostrarPreviewImagen(src);
+    const files = Array.from(inputFile.files || []);
+    if (!files.length) return;
+    const src = await leerImagen(files[0]);
+    mostrarPreviewImagen(src, files.length);
   });
 
   dropzone?.addEventListener('dragover', event => {
@@ -441,21 +454,23 @@ function configurarImagenProducto(producto) {
   dropzone?.addEventListener('drop', async event => {
     event.preventDefault();
     dropzone.classList.remove('drag-over');
-    const file = event.dataTransfer.files?.[0];
-    if (!file || !inputFile) return;
+    const files = Array.from(event.dataTransfer.files || []).filter(file => file.type.startsWith('image/'));
+    if (!files.length || !inputFile) return;
     const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
+    files.forEach(file => dataTransfer.items.add(file));
     inputFile.files = dataTransfer.files;
-    const src = await leerImagen(file);
-    mostrarPreviewImagen(src);
+    const src = await leerImagen(files[0]);
+    mostrarPreviewImagen(src, files.length);
   });
 
   selectButton?.addEventListener('click', () => inputFile?.click());
 }
 
-async function mostrarPreviewImagen(src) {
+async function mostrarPreviewImagen(src, count = 1) {
   const preview = document.getElementById('productImagePreview');
   const placeholder = document.getElementById('productImagePlaceholder');
+  const meta = document.getElementById('productImageMeta');
+  const countLabel = document.getElementById('productImageCount');
   if (!preview || !placeholder) return;
 
   const previousUrl = preview.dataset.previewUrl;
@@ -463,6 +478,11 @@ async function mostrarPreviewImagen(src) {
     URL.revokeObjectURL(previousUrl);
   }
   preview.dataset.previewUrl = '';
+
+  if (meta && countLabel) {
+    countLabel.textContent = `${count} imagen${count === 1 ? '' : 'es'} seleccionada${count === 1 ? '' : 's'}`;
+    meta.classList.toggle('hidden', count === 0);
+  }
 
   const imageId = typeof src === 'number'
       ? src
@@ -494,6 +514,20 @@ async function mostrarPreviewImagen(src) {
   }
 }
 
+function actualizarProgresoImagen(percent) {
+  const progressContainer = document.getElementById('productImageProgress');
+  const progressBar = document.getElementById('productImageProgressBar');
+  if (!progressContainer || !progressBar) return;
+  progressContainer.classList.remove('hidden');
+  progressBar.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+  if (percent >= 100) {
+    setTimeout(() => {
+      progressContainer.classList.add('hidden');
+      progressBar.style.width = '0%';
+    }, 500);
+  }
+}
+
 function leerImagen(file) {
   if (!file || !file.type.startsWith('image/')) {
     return Promise.reject(new Error('El archivo debe ser una imagen.'));
@@ -504,13 +538,14 @@ function leerImagen(file) {
 async function manejarEnvioProducto(event) {
   event.preventDefault();
   const form = event.target;
-  const archivoImagen = form.imagen?.files?.[0];
+  const archivosImagenes = Array.from(form.imagen?.files || []);
   const datos = {
     nombre: form.nombre.value.trim(),
     categoria: form.categoria.value.trim() || 'Sin categoría',
     descripcion: form.descripcion.value.trim(),
     precio: Number(form.precio.value),
-    imagenFile: archivoImagen || null,
+    imagenesFiles: archivosImagenes,
+    imagenes: adminState.productoEnEdicion ? Array.isArray(adminState.productoEnEdicion.imagenes) ? adminState.productoEnEdicion.imagenes : [] : [],
     imagenId: adminState.productoEnEdicion ? adminState.productoEnEdicion.imagenId ?? null : null,
     disponible: form.disponible?.checked === true
   };
@@ -527,7 +562,9 @@ async function manejarEnvioProducto(event) {
   try {
     if (adminState.productoEnEdicion) {
       console.log('[admin] Productos antes de actualizar:', obtenerProductos().length);
-      const actualizado = await actualizarProducto(adminState.productoEnEdicion.id, datos);
+      const actualizado = await actualizarProducto(adminState.productoEnEdicion.id, datos, {
+        onProgress: percent => actualizarProgresoImagen(percent)
+      });
       if (!actualizado) {
         throw new Error('No se pudo actualizar el producto.');
       }
@@ -535,7 +572,9 @@ async function manejarEnvioProducto(event) {
       mostrarNotificacionAdmin('✅ Producto actualizado correctamente');
     } else {
       console.log('[admin] Productos antes de guardar:', obtenerProductos().length);
-      const creado = await guardarProducto(datos);
+      const creado = await guardarProducto(datos, {
+        onProgress: percent => actualizarProgresoImagen(percent)
+      });
       if (!creado) {
         throw new Error('No se pudo guardar el producto.');
       }

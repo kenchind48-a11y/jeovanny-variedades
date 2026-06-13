@@ -10,6 +10,22 @@ const STORAGE_KEYS = {
     SELECCIONADOS: 'jv_seleccionados'
 };
 
+const IMAGE_MIGRATION_STATE_KEY = 'jv_imagenes_migradas';
+let legacyImageStorageEnabled = true;
+
+const CLOUDINARY_CONFIG = {
+    cloudName: 'YOUR_CLOUD_NAME',
+    uploadPreset: 'YOUR_UPLOAD_PRESET',
+    folder: 'jeovanny_variedades'
+};
+
+function getCloudinaryUploadUrl() {
+    if (!CLOUDINARY_CONFIG.cloudName || !CLOUDINARY_CONFIG.uploadPreset) {
+        throw new Error('Cloudinary no está configurado. Configura cloudName y uploadPreset.');
+    }
+    return `https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/auto/upload`;
+}
+
 function leerStorage(key) {
     try {
         const value = localStorage.getItem(key);
@@ -19,6 +35,58 @@ function leerStorage(key) {
         return [];
     }
 }
+
+function leerMigracionEstado() {
+    try {
+        const value = localStorage.getItem(IMAGE_MIGRATION_STATE_KEY);
+        return value === 'true';
+    } catch (error) {
+        console.error('[storage] Error leyendo estado de migración:', error);
+        return false;
+    }
+}
+
+function guardarMigracionEstado(valor) {
+    try {
+        localStorage.setItem(IMAGE_MIGRATION_STATE_KEY, valor ? 'true' : 'false');
+        sincronizarEstadoLegacy();
+    } catch (error) {
+        console.error('[storage] Error guardando estado de migración:', error);
+    }
+}
+
+function sincronizarEstadoLegacy() {
+    const migrado = leerMigracionEstado();
+    legacyImageStorageEnabled = !migrado;
+    console.debug('[IMAGES] legacy enabled:', legacyImageStorageEnabled);
+}
+
+function _isValidHttpUrl(value) {
+    return typeof value === 'string' && /^(https?:\/\/)/.test(value);
+}
+
+function obtenerImagenesDeProducto(producto) {
+    if (!producto || !Array.isArray(producto.imagenes)) return [];
+    return producto.imagenes.filter(item => typeof item === 'string' && item.trim() !== '');
+}
+
+function obtenerProductoImagenSource(producto) {
+    const urls = obtenerImagenesDeProducto(producto);
+    if (urls.length) {
+        return { url: urls[0], imageId: null };
+    }
+    if (typeof producto.imagen === 'string' && _isValidHttpUrl(producto.imagen)) {
+        return { url: producto.imagen, imageId: null };
+    }
+    const imageId = obtenerImagenIdDeProducto(producto);
+    if (Number.isFinite(imageId)) {
+        return { url: null, imageId };
+    }
+    return { url: null, imageId: null };
+}
+
+window.obtenerProductoImagenSource = obtenerProductoImagenSource;
+window.obtenerImagenesDeProducto = obtenerImagenesDeProducto;
 
 function _tamanoCadena(cadena) {
     return cadena ? new Blob([cadena]).size : 0;
@@ -128,7 +196,68 @@ async function _compressImageBlob(blob) {
     });
 }
 
+async function uploadImageToCloudinary(file, onProgress = () => {}) {
+    if (!(file instanceof Blob)) {
+        throw new Error('El archivo debe ser un Blob o File válido.');
+    }
+
+    const optimizedBlob = await _compressImageBlob(file);
+    const uploadUrl = getCloudinaryUploadUrl();
+    const formData = new FormData();
+    formData.append('file', optimizedBlob, file.name || 'image.jpg');
+    formData.append('upload_preset', CLOUDINARY_CONFIG.uploadPreset);
+    if (CLOUDINARY_CONFIG.folder) {
+        formData.append('folder', CLOUDINARY_CONFIG.folder);
+    }
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadUrl);
+        xhr.upload.addEventListener('progress', event => {
+            if (event.lengthComputable) {
+                onProgress(Math.round((event.loaded / event.total) * 100));
+            }
+        });
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response && response.secure_url) {
+                        resolve(response.secure_url);
+                    } else {
+                        reject(new Error('No se recibió secure_url de Cloudinary.'));
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+                return;
+            }
+            reject(new Error(`Error Cloudinary ${xhr.status}: ${xhr.responseText || xhr.statusText}`));
+        };
+        xhr.onerror = () => reject(new Error('Error de red subiendo imagen a Cloudinary.'));
+        xhr.send(formData);
+    });
+}
+
+async function uploadImagesToCloudinary(files, onProgress = () => {}) {
+    if (!Array.isArray(files) || files.length === 0) return [];
+    const results = [];
+    for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        const url = await uploadImageToCloudinary(file, percent => {
+            const totalPercent = Math.round(((index) / files.length) * 100 + percent / files.length);
+            onProgress(totalPercent, index + 1, files.length);
+        });
+        results.push(url);
+    }
+    return results;
+}
+
 async function guardarImagen(input) {
+    if (!legacyImageStorageEnabled) {
+        throw new Error('El almacenamiento legacy de imágenes está deshabilitado.');
+    }
     if (!(input instanceof Blob)) {
         throw new Error('La imagen debe ser un Blob o File válido.');
     }
@@ -148,6 +277,9 @@ async function guardarImagen(input) {
 }
 
 async function getImageBlobById(imageId) {
+    if (!legacyImageStorageEnabled) {
+        return null;
+    }
     const id = _parseImageId(imageId);
     if (!Number.isFinite(id)) return null;
     const db = await initImageDB();
@@ -231,6 +363,99 @@ async function migrarImagenesAIndexedDB() {
     }
 }
 
+async function migrarImagenesACloudinary(onProgress = () => {}) {
+    try {
+        const productos = obtenerProductos();
+        let cambios = false;
+
+        for (let i = 0; i < productos.length; i++) {
+            const p = productos[i];
+            if (!p) continue;
+
+            if (Array.isArray(p.imagenes) && p.imagenes.length) {
+                continue;
+            }
+
+            const originalImageId = obtenerImagenIdDeProducto(p);
+            if (!Number.isFinite(originalImageId)) {
+                continue;
+            }
+
+            const blob = await getImageBlobById(originalImageId);
+            if (!blob) {
+                console.warn('[storage][migrateCloudinary] No se encontró blob para imagenId', originalImageId);
+                continue;
+            }
+
+            try {
+                const url = await uploadImageToCloudinary(blob, percent => {
+                    const totalPercent = Math.round((i / productos.length) * 100 + percent / productos.length);
+                    onProgress(totalPercent, i + 1, productos.length);
+                });
+                p.imagenes = [url];
+                cambios = true;
+            } catch (error) {
+                console.warn('[storage][migrateCloudinary] Error subiendo imagen a Cloudinary:', error);
+            }
+        }
+
+        if (cambios) {
+            escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
+            console.log('[storage][migrateCloudinary] Migración a Cloudinary completada.');
+            if (typeof window.renderizarProductos === 'function') window.renderizarProductos();
+            if (typeof window.renderizarProductosAdmin === 'function') window.renderizarProductosAdmin();
+        }
+    } catch (e) {
+        console.warn('[storage][migrateCloudinary] Error durante migración:', e);
+    }
+}
+
+function verificarMigracionCompleta() {
+    const productos = obtenerProductos();
+    const total = productos.length;
+    let migrados = 0;
+    let pendientes = 0;
+
+    for (const producto of productos) {
+        if (!producto) continue;
+        const tieneImagenes = Array.isArray(producto.imagenes) && producto.imagenes.length;
+        const tieneLegacy = Number.isFinite(obtenerImagenIdDeProducto(producto));
+
+        if (tieneImagenes) {
+            migrados += 1;
+        } else if (tieneLegacy) {
+            pendientes += 1;
+        } else {
+            migrados += 1;
+        }
+    }
+
+    return { total, migrados, pendientes };
+}
+
+async function ejecutarMigracionSiEsNecesario(onProgress = () => {}) {
+    if (leerMigracionEstado()) {
+        return verificarMigracionCompleta();
+    }
+
+    const resultado = verificarMigracionCompleta();
+    if (resultado.pendientes === 0) {
+        guardarMigracionEstado(true);
+        legacyImageStorageEnabled = false;
+        console.log('Migración completada. Migrados:', resultado.migrados, 'Pendientes:', resultado.pendientes);
+        return resultado;
+    }
+
+    await migrarImagenesACloudinary(onProgress);
+    const final = verificarMigracionCompleta();
+    if (final.pendientes === 0) {
+        guardarMigracionEstado(true);
+        legacyImageStorageEnabled = false;
+    }
+    console.log('Migración completada. Migrados:', final.migrados, 'Pendientes:', final.pendientes);
+    return final;
+}
+
 function obtenerImagenIdDeProducto(producto) {
     if (!producto) return null;
     if (Number.isFinite(producto.imagenId)) return producto.imagenId;
@@ -242,6 +467,10 @@ function obtenerImagenIdDeProducto(producto) {
 
 // Función utilitaria para que UI cargue imágenes desde IDB
 window.cargarImagenesDesdeIDB = async function(root = document) {
+    if (!legacyImageStorageEnabled) {
+        console.debug('[IMAGES] legacy disabled, skipping IDB load');
+        return;
+    }
     try {
         const imgs = Array.from((root || document).querySelectorAll('img[data-image-id], img[data-idb]'));
         for (const img of imgs) {
@@ -266,6 +495,24 @@ window.cargarImagenesDesdeIDB = async function(root = document) {
     }
 };
 
+async function limpiarImagenesLegacy() {
+    if (!('indexedDB' in window)) {
+        throw new Error('IndexedDB no disponible');
+    }
+
+    const db = await initImageDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readwrite');
+        const store = tx.objectStore('images');
+        const req = store.clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error || new Error('Error limpiando imágenes legacy en IndexedDB'));
+    });
+}
+
+window.verificarMigracionCompleta = verificarMigracionCompleta;
+window.limpiarImagenesLegacy = limpiarImagenesLegacy;
+
 function escribirStorage(key, value) {
     try {
         localStorage.setItem(key, JSON.stringify(value));
@@ -278,14 +525,13 @@ function obtenerProductos() {
     return leerStorage(STORAGE_KEYS.PRODUCTOS);
 }
 
-async function guardarProducto(producto) {
+async function guardarProducto(producto, options = {}) {
     const precio = Number(producto.precio ?? 0);
-    let imagenId = null;
-    if (typeof producto.imagenId === 'number' && Number.isFinite(producto.imagenId)) {
-        imagenId = producto.imagenId;
-    }
-    if (producto.imagenFile) {
-        imagenId = await guardarImagen(producto.imagenFile);
+    const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+
+    let imagenes = Array.isArray(producto.imagenes) ? producto.imagenes : [];
+    if (Array.isArray(producto.imagenesFiles) && producto.imagenesFiles.length) {
+        imagenes = await uploadImagesToCloudinary(producto.imagenesFiles, onProgress);
     }
 
     const nuevoProducto = {
@@ -295,7 +541,8 @@ async function guardarProducto(producto) {
         precio: Number.isFinite(precio) ? precio : 0,
         descripcion: producto.descripcion || '',
         disponible: producto.disponible === true,
-        imagenId: imagenId !== null ? imagenId : null,
+        imagenes: imagenes.length ? imagenes : [],
+        imagenId: typeof producto.imagenId === 'number' && Number.isFinite(producto.imagenId) ? producto.imagenId : null,
         fechaCreacion: new Date().toISOString()
     };
 
@@ -313,30 +560,31 @@ async function guardarProducto(producto) {
     }
 }
 
-async function actualizarProducto(id, datosActualizados) {
+async function actualizarProducto(id, datosActualizados, options = {}) {
     const productos = obtenerProductos();
     const index = productos.findIndex(item => item.id === id);
     if (index === -1) return false;
 
+    const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
     const precioActualizado = Number(datosActualizados.precio ?? productos[index].precio);
     const disponibleActualizado = typeof datosActualizados.disponible === 'boolean'
         ? datosActualizados.disponible
         : productos[index].disponible;
 
-    let imagenIdActualizado = productos[index].imagenId ?? null;
-    if (datosActualizados.imagenFile) {
+    let imagenesActualizadas = Array.isArray(productos[index].imagenes) ? productos[index].imagenes : [];
+    if (Array.isArray(datosActualizados.imagenesFiles) && datosActualizados.imagenesFiles.length) {
         try {
-            const nuevoId = await guardarImagen(datosActualizados.imagenFile);
-            const antiguoId = imagenIdActualizado;
-            imagenIdActualizado = nuevoId;
-            if (Number.isFinite(antiguoId)) {
-                await deleteImageById(antiguoId);
-            }
+            imagenesActualizadas = await uploadImagesToCloudinary(datosActualizados.imagenesFiles, onProgress);
         } catch (e) {
-            console.error('[storage] No se pudo guardar la nueva imagen:', e);
+            console.error('[storage] No se pudo subir las nuevas imágenes a Cloudinary:', e);
             return false;
         }
-    } else if (typeof datosActualizados.imagenId !== 'undefined') {
+    } else if (Array.isArray(datosActualizados.imagenes)) {
+        imagenesActualizadas = datosActualizados.imagenes;
+    }
+
+    let imagenIdActualizado = productos[index].imagenId ?? null;
+    if (typeof datosActualizados.imagenId !== 'undefined') {
         if (datosActualizados.imagenId === null && Number.isFinite(imagenIdActualizado)) {
             await deleteImageById(imagenIdActualizado);
         }
@@ -346,6 +594,7 @@ async function actualizarProducto(id, datosActualizados) {
     productos[index] = {
         ...productos[index],
         ...datosActualizados,
+        imagenes: imagenesActualizadas,
         imagenId: imagenIdActualizado !== null ? imagenIdActualizado : null,
         precio: Number.isFinite(precioActualizado) ? precioActualizado : productos[index].precio,
         disponible: disponibleActualizado,
@@ -354,6 +603,7 @@ async function actualizarProducto(id, datosActualizados) {
     };
     delete productos[index].imagen;
     delete productos[index].imagenFile;
+    delete productos[index].imagenesFiles;
 
     try {
         escribirStorage(STORAGE_KEYS.PRODUCTOS, productos);
@@ -648,6 +898,7 @@ function mostrarToast(mensaje, tipo = 'success') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    sincronizarEstadoLegacy();
     (async () => {
         try {
             await inicializarDatos();
@@ -656,9 +907,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            await migrarImagenesAIndexedDB();
+            await ejecutarMigracionSiEsNecesario();
         } catch (err) {
-            console.warn('[storage] migrarImagenesAIndexedDB fallo', err);
+            console.warn('[storage] migración a Cloudinary falló', err);
         }
     })();
 });

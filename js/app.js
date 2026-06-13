@@ -182,13 +182,16 @@ function crearTarjetaProducto(producto) {
     const seleccionado = obtenerSeleccionados().includes(producto.id);
     const estadoClass = producto.disponible ? 'available' : 'unavailable';
     const estadoTexto = producto.disponible ? 'Disponible' : 'Agotado';
-    const imagenId = typeof window.obtenerImagenIdDeProducto === 'function'
-        ? window.obtenerImagenIdDeProducto(producto)
-        : (producto.imagenId ?? null);
-    const tieneImagen = Number.isFinite(imagenId);
-    const imagenHtml = tieneImagen
-        ? `<img data-image-id="${imagenId}" alt="${producto.nombre}">`
-        : `<span>📦</span>`;
+    const imagenSource = typeof window.obtenerProductoImagenSource === 'function'
+        ? window.obtenerProductoImagenSource(producto)
+        : { url: null, imageId: null };
+    const tieneUrl = _isValidHttpUrl(imagenSource.url);
+    const tieneImagen = Number.isFinite(imagenSource.imageId);
+    const imagenHtml = tieneUrl
+        ? `<img src="${imagenSource.url}" alt="${producto.nombre}">`
+        : tieneImagen
+            ? `<img data-image-id="${imagenSource.imageId}" alt="${producto.nombre}">`
+            : `<span>📦</span>`;
 
     card.innerHTML = `
         <div class="product-hero">${imagenHtml}</div>
