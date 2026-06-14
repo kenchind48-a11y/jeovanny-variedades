@@ -541,16 +541,10 @@ async function manejarEnvioProducto(event) {
   const archivosImagenes = Array.from(form.imagen?.files || []);
   const archivoImagen = archivosImagenes.length ? archivosImagenes[0] : null;
 
-  let imagenes = adminState.productoEnEdicion ? (Array.isArray(adminState.productoEnEdicion.imagenes) ? adminState.productoEnEdicion.imagenes : []) : [];
-  let imagen = adminState.productoEnEdicion?.imagen || null;
-
-  if (archivoImagen) {
-    if (typeof window.subirImagenCloudinary !== 'function') {
-      throw new Error('subirImagenCloudinary no está disponible');
-    }
-    imagen = await window.subirImagenCloudinary(archivoImagen);
-    imagenes = [imagen];
-  }
+  const imagenAnterior = adminState.productoEnEdicion?.imagen || null;
+  const imagenUrl = archivoImagen
+    ? await window.subirImagenCloudinary(archivoImagen)
+    : (imagenAnterior || '📦');
 
   const datos = {
     nombre: form.nombre.value.trim(),
@@ -558,8 +552,8 @@ async function manejarEnvioProducto(event) {
     descripcion: form.descripcion.value.trim(),
     precio: Number(form.precio.value),
     imagenesFiles: [],
-    imagenes,
-    imagen,
+    imagenes: archivoImagen ? [imagenUrl] : (adminState.productoEnEdicion ? (Array.isArray(adminState.productoEnEdicion.imagenes) ? adminState.productoEnEdicion.imagenes : []) : []),
+    imagen: imagenUrl,
     imagenId: adminState.productoEnEdicion ? adminState.productoEnEdicion.imagenId ?? null : null,
     disponible: form.disponible?.checked === true
   };
